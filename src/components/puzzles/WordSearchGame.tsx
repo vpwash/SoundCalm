@@ -92,15 +92,28 @@ export const WordSearchGame: React.FC<WordSearchGameProps> = ({
     return false;
   };
 
-  const handleCellPointerDown = (r: number, c: number) => {
+  const handleCellPointerDown = (
+    e: React.PointerEvent<HTMLButtonElement>,
+    r: number,
+    c: number
+  ) => {
     if (isSolved) return;
 
-    // Support tap-start -> tap-end as well as click-and-drag
+    // Support tap-start -> tap-end as well as click/touch-and-drag
     if (anchorCell && (anchorCell[0] !== r || anchorCell[1] !== c)) {
       const committed = tryCommitSelection(anchorCell, [r, c]);
       if (committed) {
         setIsDragging(false);
         return;
+      }
+    }
+
+    // Release implicit touch pointer capture so pointermove tracks across sibling cells on iOS/Android
+    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        // Ignore if not captured
       }
     }
 
@@ -110,10 +123,15 @@ export const WordSearchGame: React.FC<WordSearchGameProps> = ({
     audioEngine.playHarmonicChime(0);
   };
 
-  const handleCellPointerEnter = (r: number, c: number) => {
-    if (!anchorCell || isSolved) return;
-    if (isDragging) {
-      setHoverCell([r, c]);
+  const handleGridPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging || !anchorCell || isSolved) return;
+    const target = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    const cellEl = target?.closest?.('[data-ws-row]') as HTMLElement | null;
+    if (!cellEl) return;
+    const r = Number(cellEl.dataset.wsRow);
+    const c = Number(cellEl.dataset.wsCol);
+    if (Number.isInteger(r) && Number.isInteger(c)) {
+      setHoverCell((prev) => (prev && prev[0] === r && prev[1] === c ? prev : [r, c]));
     }
   };
 
@@ -152,6 +170,7 @@ export const WordSearchGame: React.FC<WordSearchGameProps> = ({
   return (
     <div
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       onPointerLeave={handlePointerUp}
       className="relative w-full min-h-[410px] sm:min-h-[460px] h-full flex flex-col justify-between p-3 sm:p-5 select-none overflow-hidden"
     >
@@ -198,6 +217,7 @@ export const WordSearchGame: React.FC<WordSearchGameProps> = ({
       <div className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-4 my-2.5">
         {/* Letter Grid */}
         <div
+          onPointerMove={handleGridPointerMove}
           className="grid gap-1 sm:gap-1.5 p-2.5 sm:p-3 rounded-2xl bg-slate-950/80 border border-slate-800 shadow-inner touch-none"
           style={{
             gridTemplateColumns: `repeat(${config.gridSize}, minmax(0, 1fr))`,
@@ -214,8 +234,9 @@ export const WordSearchGame: React.FC<WordSearchGameProps> = ({
                 <button
                   key={key}
                   type="button"
-                  onPointerDown={() => handleCellPointerDown(r, c)}
-                  onPointerEnter={() => handleCellPointerEnter(r, c)}
+                  data-ws-row={r}
+                  data-ws-col={c}
+                  onPointerDown={(e) => handleCellPointerDown(e, r, c)}
                   style={
                     isSelected
                       ? undefined
