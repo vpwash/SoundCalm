@@ -1,0 +1,228 @@
+@import "tailwindcss";
+
+@layer base {
+  html,
+  body {
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+}
+
+/* ==========================================================================
+   Sensory-Calibrated UI Theme Palettes
+   ========================================================================== */
+
+/* 1. Midnight Sanctuary (Default Dark) */
+:root,
+[data-theme='midnight_sanctuary'] {
+  --theme-ink: #f8fafc;
+}
+
+/* 2. Kyoto Moss & Bamboo (Botanical Forest Dark) */
+[data-theme='kyoto_moss'] {
+  --theme-ink: #ecfdf5;
+  --color-slate-950: #06110c;
+  --color-slate-900: #0d1f17;
+  --color-slate-800: #173327;
+  --color-slate-700: #234738;
+  --color-slate-500: #6b9080;
+  --color-slate-400: #8fb3a3;
+  --color-slate-300: #c2dfd2;
+  --color-slate-200: #dff2e9;
+  --color-slate-100: #ecfdf5;
+  --color-teal-950: #062e20;
+  --color-teal-600: #10b981;
+  --color-teal-500: #34d399;
+  --color-teal-400: #6ee7b7;
+  --color-teal-300: #a7f3d0;
+  --color-indigo-950: #1a2e19;
+  --color-indigo-600: #4d7c0f;
+  --color-indigo-500: #65a30d;
+  --color-indigo-400: #84cc16;
+  --color-indigo-300: #bef264;
+  --color-indigo-200: #d9f99d;
+}
+
+/* 3. Lavender Twilight (Velvet Plum Dusk) */
+[data-theme='lavender_dusk'] {
+  --theme-ink: #faf5ff;
+  --color-slate-950: #0e091a;
+  --color-slate-900: #18112b;
+  --color-slate-800: #291e45;
+  --color-slate-700: #3b2c61;
+  --color-slate-500: #8b7aa8;
+  --color-slate-400: #afa0c9;
+  --color-slate-300: #d5c9eb;
+  --color-slate-200: #ede5fa;
+  --color-slate-100: #faf5ff;
+  --color-teal-950: #2e1047;
+  --color-teal-600: #9333ea;
+  --color-teal-500: #a855f7;
+  --color-teal-400: #c084fc;
+  --color-teal-300: #d8b4fe;
+  --color-sky-400: #f472b6;
+  --color-sky-300: #f9a8d4;
+}
+
+/* 4. Candlelit Hearth (Zero-Blue-Light Warm Amber Night) */
+[data-theme='amber_hearth'] {
+  --theme-ink: #fef3c7;
+  --color-slate-950: #130c07;
+  --color-slate-900: #20150d;
+  --color-slate-800: #362417;
+  --color-slate-700: #4d3422;
+  --color-slate-500: #9c7a5b;
+  --color-slate-400: #bfa082;
+  --color-slate-300: #e0c7ad;
+  --color-slate-200: #f5e6d3;
+  --color-slate-100: #fffbeb;
+  --color-teal-950: #3b2106;
+  --color-teal-600: #d97706;
+  --color-teal-500: #f59e0b;
+  --color-teal-400: #fbbf24;
+  --color-teal-300: #fcd34d;
+  --color-sky-600: #b45309;
+  --color-sky-500: #d97706;
+  --color-sky-400: #f59e0b;
+  --color-sky-300: #fde68a;
+  --color-indigo-950: #361c0b;
+  --color-indigo-600: #c2410c;
+  --color-indigo-500: #ea580c;
+  --color-indigo-400: #fb923c;
+  --color-indigo-300: #fdba74;
+  --color-indigo-200: #fed7aa;
+}
+
+/* 5. Warm Washi Paper (Cozy Daylight Puzzle Book) */
+[data-theme='warm_parchment'] {
+  --theme-ink: #1c2421;
+  --color-slate-950: #f5efe2;
+  --color-slate-900: #ebe3d2;
+  --color-slate-800: #d6cbb5;
+  --color-slate-700: #bfb197;
+  --color-slate-600: #9c8e75;
+  --color-slate-500: #695e4c;
+  --color-slate-400: #4f4638;
+  --color-slate-300: #2f2a21;
+  --color-slate-200: #211d16;
+  --color-slate-100: #17140f;
+  --color-teal-950: #cfe6df;
+  --color-teal-600: #176959;
+  --color-teal-500: #1e7a68;
+  --color-teal-400: #176959;
+  --color-teal-300: #0f5245;
+  --color-teal-200: #0b3f35;
+  --color-teal-100: #072c25;
+  --color-sky-400: #0369a1;
+  --color-sky-300: #075985;
+  --color-sky-200: #0c4a6e;
+  --color-sky-100: #082f49;
+  --color-indigo-950: #ded9f2;
+  --color-indigo-400: #4f46e5;
+  --color-indigo-300: #3730a3;
+  --color-indigo-200: #312e81;
+  --color-amber-400: #b45309;
+  --color-amber-300: #92400e;
+  --color-amber-200: #78350f;
+  --color-amber-100: #5c280b;
+  --color-emerald-400: #047857;
+  --color-emerald-300: #065f46;
+  --color-emerald-200: #064e3b;
+  --color-emerald-100: #022c22;
+  --color-rose-400: #be123c;
+  --color-rose-300: #9f1239;
+  --color-rose-200: #881337;
+  --color-rose-100: #690d2a;
+}
+
+/* 6. Nordic Mist Daylight (Glare-Free Overcast Fjord Light) */
+[data-theme='nordic_fjord'] {
+  --theme-ink: #12202f;
+  --color-slate-950: #ebf1f6;
+  --color-slate-900: #dce6f0;
+  --color-slate-800: #c4d3e3;
+  --color-slate-700: #a9bdd3;
+  --color-slate-600: #7e97b3;
+  --color-slate-500: #51667d;
+  --color-slate-400: #3b4f66;
+  --color-slate-300: #233447;
+  --color-slate-200: #162436;
+  --color-slate-100: #0d1826;
+  --color-teal-950: #cce3f5;
+  --color-teal-600: #026aa7;
+  --color-teal-500: #0284c7;
+  --color-teal-400: #0369a1;
+  --color-teal-300: #075985;
+  --color-teal-200: #0c4a6e;
+  --color-teal-100: #082f49;
+  --color-sky-400: #0284c7;
+  --color-sky-300: #0369a1;
+  --color-sky-200: #075985;
+  --color-sky-100: #0c4a6e;
+  --color-indigo-950: #d8dff5;
+  --color-indigo-400: #4338ca;
+  --color-indigo-300: #3730a3;
+  --color-indigo-200: #312e81;
+  --color-amber-400: #b45309;
+  --color-amber-300: #92400e;
+  --color-amber-200: #78350f;
+  --color-amber-100: #5c280b;
+  --color-emerald-400: #047857;
+  --color-emerald-300: #065f46;
+  --color-emerald-200: #064e3b;
+  --color-emerald-100: #022c22;
+  --color-rose-400: #be123c;
+  --color-rose-300: #9f1239;
+  --color-rose-200: #881337;
+  --color-rose-100: #690d2a;
+}
+
+/* Ensure headings & labels using .text-white adapt cleanly in Daylight themes
+   while solid CTA buttons retain crisp white text */
+[data-theme-mode='light'] .text-white:not(.bg-teal-600):not(.bg-rose-600):not(.bg-sky-600):not(.bg-indigo-600):not(.bg-indigo-500):not(.bg-emerald-600):not(.from-teal-500):not(.from-rose-600) {
+  color: var(--theme-ink);
+}
+
+[data-theme-mode='light'] .bg-teal-600,
+[data-theme-mode='light'] .bg-rose-600,
+[data-theme-mode='light'] .bg-sky-600,
+[data-theme-mode='light'] .bg-indigo-600,
+[data-theme-mode='light'] .bg-indigo-500,
+[data-theme-mode='light'] .bg-emerald-600,
+[data-theme-mode='light'] .from-teal-500,
+[data-theme-mode='light'] .from-rose-600 {
+  color: #ffffff !important;
+}
+
+[data-theme-mode='light'] .from-rose-600 .text-rose-200 {
+  color: #ffe4e6 !important;
+}
+
+[data-theme-mode='light'] .bg-teal-600 .text-white,
+[data-theme-mode='light'] .bg-rose-600 .text-white,
+[data-theme-mode='light'] .bg-sky-600 .text-white,
+[data-theme-mode='light'] .bg-indigo-600 .text-white,
+[data-theme-mode='light'] .bg-indigo-500 .text-white,
+[data-theme-mode='light'] .bg-emerald-600 .text-white,
+[data-theme-mode='light'] .from-teal-500 .text-white,
+[data-theme-mode='light'] .from-rose-600 .text-white {
+  color: #ffffff !important;
+}
+
+/* Hide scrollbars on horizontal mobile carousels while keeping swipe scroll */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Touch-friendly range slider thumbs on mobile & tablet */
+input[type='range']::-webkit-slider-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+}
