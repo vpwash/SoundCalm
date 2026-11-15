@@ -1,4 +1,4 @@
-import { SessionLog } from '../types.ts';
+import type { SessionLog } from '../types.ts';
 
 export interface DailyReminderSettings {
   enabled: boolean;

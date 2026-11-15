@@ -6,7 +6,7 @@
  * - Parent PIN & clinical configuration
  */
 
-import { ParentSettings, SessionLog, AudioTrack } from '../types.ts';
+import type { ParentSettings, SessionLog, AudioTrack } from '../types.ts';
 import { hashPin } from './clinical.ts';
 
 const DB_NAME = 'soundcalm_db';
@@ -14,6 +14,7 @@ const DB_VERSION = 1;
 const STORE_SESSIONS = 'sessions';
 const STORE_AUDIO_TRACKS = 'audio_tracks';
 const SETTINGS_KEY = 'soundcalm_parent_settings';
+const EXTERNAL_MUSIC_MODE_KEY = 'soundcalm_external_music_mode';
 
 const DEFAULT_SALT = 'soundcalm_salt_2026';
 export const DEFAULT_PARENT_SETTINGS: ParentSettings = {
@@ -323,6 +324,26 @@ export function saveParentSettings(settings: ParentSettings): void {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(toSave));
   } catch (e) {
     console.warn('Failed to save settings:', e);
+  }
+}
+
+// ================= External Background Music Mode =================
+
+export function getExternalMusicMode(): boolean {
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    return localStorage.getItem(EXTERNAL_MUSIC_MODE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function saveExternalMusicMode(enabled: boolean): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(EXTERNAL_MUSIC_MODE_KEY, enabled ? 'true' : 'false');
+  } catch {
+    // Ignore storage errors in restricted contexts
   }
 }
 

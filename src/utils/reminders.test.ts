@@ -10,7 +10,7 @@ import {
   parseTimeHHMM,
   shouldTriggerDailyReminder,
 } from './reminders.ts';
-import { SessionLog } from '../types.ts';
+import type { SessionLog } from '../types.ts';
 
 test('parseTimeHHMM and formatTimeHHMM12Hour parse and format 24h strings safely', () => {
   assert.deepEqual(parseTimeHHMM('19:00'), { hours: 19, minutes: 0 });

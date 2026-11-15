@@ -12,7 +12,8 @@ import {
   calculateTargetSessionMinutes,
   getRecentSudsImprovementSeries,
 } from './clinical.ts';
-import { SessionLog } from '../types.ts';
+import type { SessionLog } from '../types.ts';
+import { getExternalMusicMode, saveExternalMusicMode } from './storage.ts';
 
 test('calculateDeltaSuds properly computes difference and clamps inputs', () => {
   // Reduction in distress
@@ -280,4 +281,15 @@ test('getRecentSudsImprovementSeries keeps last 7 chronological sessions with ac
   assert.equal(series[6].id, 's_10');
   assert.equal(series[6].label, '#7');
   assert.equal(series[6].improvement, series[6].preSuds - series[6].postSuds);
+});
+
+test('External Music Mode preference persists and defaults safely', () => {
+  // In Node environment without localStorage or with mock localStorage
+  assert.equal(typeof getExternalMusicMode(), 'boolean');
+  saveExternalMusicMode(true);
+  if (typeof localStorage !== 'undefined') {
+    assert.equal(getExternalMusicMode(), true);
+    saveExternalMusicMode(false);
+    assert.equal(getExternalMusicMode(), false);
+  }
 });

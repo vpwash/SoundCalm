@@ -37,6 +37,11 @@ import {
 } from '../utils/acousticFoley.ts';
 import { audioEngine } from '../audio/AudioEngine.ts';
 import { getThemeById, getStoredThemeId, ThemeId } from '../utils/themes.ts';
+import {
+  PRELOADED_TRIGGERS,
+  PreloadedTriggerItem,
+  loadPreloadedTriggerBuffer,
+} from '../utils/preloadedTriggers.ts';
 
 interface TriggerStudioProps {
   activeTriggerId: string;
@@ -282,6 +287,7 @@ export const TriggerStudio: React.FC<TriggerStudioProps> = ({
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
     }
+    audioEngine.restoreAmbientAudioSession();
   }, []);
 
   const loadSavedRecords = useCallback(async () => {
@@ -952,6 +958,36 @@ export const TriggerStudio: React.FC<TriggerStudioProps> = ({
     themeId,
   ]);
 
+  const handleLoadPreloaded = async (item: PreloadedTriggerItem) => {
+    stopAllStudioPlayback();
+    try {
+      const ctx = audioEngine.ensureContext();
+      const { buffer, offsetSec, durationSec } = await loadPreloadedTriggerBuffer(item, ctx);
+      setRecordedBuffer(buffer);
+      setWaveformPeaks(computePeaksFromBuffer(buffer));
+      setClipOffsetSec(offsetSec);
+      setClipDurationSec(durationSec);
+      setCustomName(item.name);
+      setFilterCutoff(item.defaultCutoffHz);
+      setSourceType('upload');
+
+      onSelectTrigger(
+        item.id,
+        buffer,
+        item.name,
+        item.defaultCutoffHz,
+        offsetSec,
+        durationSec
+      );
+      playSlicePreview(buffer, offsetSec, durationSec, 'micro');
+      setStatusNotice(
+        `Loaded preloaded "${item.name}" clip (${buffer.duration.toFixed(1)}s) and isolated its ${durationSec.toFixed(2)}s Micro-Clip window.`
+      );
+    } catch {
+      setStatusNotice(`Could not load "${item.name}". Make sure the file exists in /triggers/.`);
+    }
+  };
+
   // Save real recorded/uploaded clip and its 0.5s Micro-Clip window to IndexedDB
   const handleSaveTrack = async () => {
     if (!recordedBuffer) return;
@@ -1109,6 +1145,39 @@ export const TriggerStudio: React.FC<TriggerStudioProps> = ({
           <span>{statusNotice}</span>
         </div>
       )}
+
+      {/* Preloaded Trigger Library (/public/triggers/*.mp3) */}
+      <div className="rounded-2xl bg-slate-950/60 border border-slate-800 p-3 sm:p-4 flex flex-wrap items-center justify-between gap-2.5">
+        <div>
+          <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+            <Music className="w-3.5 h-3.5 text-teal-400" />
+            <span>Preloaded Trigger Clips</span>
+          </h4>
+          <p className="text-[11px] text-slate-400">
+            Ready-to-use MP3 triggers — tap to load, preview, and trim.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {PRELOADED_TRIGGERS.map((item) => {
+            const isSelected = activeTriggerId === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => void handleLoadPreloaded(item)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition cursor-pointer ${
+                  isSelected
+                    ? 'bg-teal-600 border-teal-400 text-white shadow-sm'
+                    : 'bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-200'
+                }`}
+              >
+                <Play className="w-3 h-3 fill-current" />
+                <span>{item.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Live Recording Meter & Interactive Acoustic Foley Pads (Shown right at top when recording!) */}
       {isRecording && (

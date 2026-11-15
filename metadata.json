@@ -1,6 +1,0 @@
-{
-  "name": "SoundCalm - Misophonia Sound Therapy",
-  "description": "Neuro-acoustic habituation platform for misophonia with triple-channel audio mixing, calming spatial puzzles, parent controls, and SUDS tracking.",
-  "requestFramePermissions": ["microphone"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

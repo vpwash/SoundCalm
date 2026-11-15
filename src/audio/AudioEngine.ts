@@ -241,6 +241,7 @@ export class AudioEngine {
   private filterCutoffHz: number = 2200;
   private isMutedPanic: boolean = false;
   private isUnlocked: boolean = false;
+  private audioSessionMode: 'playback' | 'ambient' = 'playback';
   private wakeLock: WakeLockSentinel | null = null;
 
   // Pentatonic scale frequencies tuned to 432Hz base (A4 = 432 Hz)
@@ -355,30 +356,108 @@ export class AudioEngine {
     this.musicRotationListeners.forEach((l) => l(status));
   }
 
+  /**
+   * Sets the OS AudioSession mode (Safari/iOS 16.4+ and supporting mobile browsers):
+   * - 'playback': Plays built-in SoundCalm music/soundscapes even if the iPhone Silent switch is on.
+   * - 'ambient': Mixes SoundCalm's Web Audio on top of external apps (Spotify, Amazon Music, etc.)
+   *   without pausing them (requires iPhone Silent Mode to be off).
+   */
+  public setAudioSessionMode(mode: 'playback' | 'ambient'): void {
+    this.audioSessionMode = mode;
+    this.applyAudioSessionMode();
+  }
+
+  private applyAudioSessionMode(): void {
+    try {
+      if (typeof navigator !== 'undefined' && 'audioSession' in navigator) {
+        const navWithAudioSession = navigator as Navigator & {
+          audioSession?: { type?: string };
+        };
+        if (
+          navWithAudioSession.audioSession &&
+          navWithAudioSession.audioSession.type !== this.audioSessionMode
+        ) {
+          navWithAudioSession.audioSession.type = this.audioSessionMode;
+        }
+      }
+    } catch {
+      // Ignore if browser restricts audioSession mutation
+    }
+  }
+
+  /**
+   * Restores the active audio session mode and resumes the AudioContext after
+   * microphone capture (getUserMedia) or switching back from another app.
+   */
+  public restoreAmbientAudioSession(): void {
+    this.applyAudioSessionMode();
+    if (this.ctx) {
+      const state = this.ctx.state as string;
+      if (state === 'suspended' || state === 'interrupted') {
+        this.ctx.resume().catch(() => {});
+      }
+    }
+  }
+
+  /**
+   * Synchronously plays a 1-sample silent buffer inside a user gesture to unlock
+   * iOS Safari / WebKit's hardware audio daemon.
+   */
+  private unlockWebKitAudio(): void {
+    if (!this.ctx) return;
+    try {
+      const silentBuf = this.ctx.createBuffer(1, 1, 22050);
+      const src = this.ctx.createBufferSource();
+      src.buffer = silentBuf;
+      src.connect(this.ctx.destination);
+      src.start(0);
+    } catch {
+      // Ignore if context is not ready
+    }
+  }
+
   public ensureContext(): AudioContext {
+    this.applyAudioSessionMode();
     if (!this.ctx) {
       const AudioCtxClass =
         window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       try {
-        this.ctx = new AudioCtxClass({ latencyHint: 'playback' });
+        this.ctx = new AudioCtxClass({ latencyHint: 'interactive' });
       } catch {
         this.ctx = new AudioCtxClass();
       }
       this.setupGraph();
       this.isUnlocked = true;
 
-      const resumeOnGesture = () => {
-        if (this.ctx && this.ctx.state === 'suspended') {
-          this.ctx.resume().catch(() => {});
+      const resumeAndUnlock = () => {
+        this.applyAudioSessionMode();
+        if (this.ctx) {
+          const state = this.ctx.state as string;
+          if (state === 'suspended' || state === 'interrupted') {
+            this.ctx.resume().catch(() => {});
+          }
+          this.unlockWebKitAudio();
         }
       };
-      window.addEventListener('pointerdown', resumeOnGesture, { passive: true });
-      window.addEventListener('keydown', resumeOnGesture, { passive: true });
+      window.addEventListener('touchend', resumeAndUnlock, { passive: true });
+      window.addEventListener('pointerdown', resumeAndUnlock, { passive: true });
+      window.addEventListener('keydown', resumeAndUnlock, { passive: true });
+      window.addEventListener('focus', resumeAndUnlock, { passive: true });
+      window.addEventListener('pageshow', resumeAndUnlock, { passive: true });
+      if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            resumeAndUnlock();
+          }
+        });
+      }
     }
-    if (this.ctx.state === 'suspended') {
+    const currentState = this.ctx.state as string;
+    if (currentState === 'suspended' || currentState === 'interrupted') {
       this.ctx.resume().catch(() => {});
     }
+    this.unlockWebKitAudio();
     return this.ctx;
   }
 
@@ -387,7 +466,7 @@ export class AudioEngine {
     return this.masterCompressor || this.masterLimiter || this.ctx?.destination || null;
   }
 
-  public async initAudio(): Promise<boolean> {
+  public initAudio(): boolean {
     try {
       this.ensureContext();
       this.requestWakeLock();

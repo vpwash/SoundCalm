@@ -4,14 +4,10 @@ import {
   Sparkles,
   RefreshCw,
   Volume2,
-  ChevronLeft,
-  ChevronRight,
   CheckCircle2,
-  Shapes,
   Palette,
   Infinity as InfinityIcon,
   Flower2,
-  Wand2,
   Star,
   Play,
   Square,
@@ -25,27 +21,27 @@ import {
   Sliders,
   ChevronDown,
   ChevronUp,
+  Search,
+  Move,
 } from 'lucide-react';
 import { PanicButton } from './PanicButton.tsx';
 import { ZenSudokuGame } from './puzzles/ZenSudokuGame.tsx';
 import { CozyNonogramGame } from './puzzles/CozyNonogramGame.tsx';
-import { HarmonicTangramGame } from './puzzles/HarmonicTangramGame.tsx';
+import { WordSearchGame } from './puzzles/WordSearchGame.tsx';
+import { BlockSlideGame } from './puzzles/BlockSlideGame.tsx';
 import { ChromaFlowGame } from './puzzles/ChromaFlowGame.tsx';
 import { ZenRippleLoopsGame } from './puzzles/ZenRippleLoopsGame.tsx';
 import { MandalaSymmetryGame } from './puzzles/MandalaSymmetryGame.tsx';
-import {
-  generateConstellationLevel,
-  getMasteryTier,
-} from '../utils/puzzles.ts';
-import { getThemeById, getStoredThemeId, ThemeId } from '../utils/themes.ts';
+import { ThemeId } from '../utils/themes.ts';
+import { PRELOADED_TRIGGERS, PreloadedTriggerItem } from '../utils/preloadedTriggers.ts';
 
 export type PuzzleGameMode =
   | 'sudoku'
   | 'nonogram'
+  | 'wordsearch'
+  | 'blockslide'
   | 'zenloops'
   | 'chroma'
-  | 'tangram'
-  | 'constellation'
   | 'mandala';
 
 interface PuzzleModeOption {
@@ -72,6 +68,20 @@ const PUZZLE_MODES: PuzzleModeOption[] = [
     icon: <LayoutGrid className="w-3.5 h-3.5" />,
   },
   {
+    id: 'wordsearch',
+    label: 'Serene Word Search',
+    shortLabel: 'Word Search',
+    tagline: 'Calming Word Grid',
+    icon: <Search className="w-3.5 h-3.5" />,
+  },
+  {
+    id: 'blockslide',
+    label: 'Jade Block Slide',
+    shortLabel: 'Block Slide',
+    tagline: '6×6 Path Escape',
+    icon: <Move className="w-3.5 h-3.5" />,
+  },
+  {
     id: 'zenloops',
     label: 'Zen Ripple Loops',
     shortLabel: 'Zen Loops',
@@ -86,20 +96,6 @@ const PUZZLE_MODES: PuzzleModeOption[] = [
     icon: <Palette className="w-3.5 h-3.5" />,
   },
   {
-    id: 'tangram',
-    label: 'Harmonic Tangram',
-    shortLabel: 'Tangram',
-    tagline: 'Crystal Mosaic',
-    icon: <Shapes className="w-3.5 h-3.5" />,
-  },
-  {
-    id: 'constellation',
-    label: 'Constellation Connect',
-    shortLabel: 'Constellation',
-    tagline: 'Starlight Weaving',
-    icon: <Sparkles className="w-3.5 h-3.5" />,
-  },
-  {
     id: 'mandala',
     label: 'Mandala Symmetry',
     shortLabel: 'Mandala',
@@ -110,6 +106,7 @@ const PUZZLE_MODES: PuzzleModeOption[] = [
 
 interface ConstellationGameProps {
   parentCeilingGain: number;
+  activeTriggerId?: string;
   activeTriggerName: string;
   hasRecordedClip: boolean;
   themeId?: ThemeId;
@@ -117,11 +114,13 @@ interface ConstellationGameProps {
   onFinishSession: () => void;
   onOpenStudio: () => void;
   onQuickUploadClip: (file: File) => void;
+  onSelectPreloadedTrigger?: (item: PreloadedTriggerItem) => void;
   onRenameActiveTrigger: (newName: string) => void;
 }
 
 export const ConstellationGame: React.FC<ConstellationGameProps> = ({
   parentCeilingGain,
+  activeTriggerId,
   activeTriggerName,
   hasRecordedClip,
   themeId,
@@ -129,16 +128,17 @@ export const ConstellationGame: React.FC<ConstellationGameProps> = ({
   onFinishSession,
   onOpenStudio,
   onQuickUploadClip,
+  onSelectPreloadedTrigger,
   onRenameActiveTrigger,
 }) => {
   const [activeGameMode, setActiveGameMode] = useState<PuzzleGameMode>('sudoku');
   const [levelsByMode, setLevelsByMode] = useState<Record<PuzzleGameMode, number>>({
     sudoku: 1,
     nonogram: 1,
+    wordsearch: 1,
+    blockslide: 1,
     zenloops: 1,
     chroma: 1,
-    tangram: 1,
-    constellation: 1,
     mandala: 1,
   });
   const [harmonyStars, setHarmonyStars] = useState<number>(0);
@@ -148,16 +148,6 @@ export const ConstellationGame: React.FC<ConstellationGameProps> = ({
     title: 'Level 1: 6×6 Gentle Awakening',
     subtitle: 'Fill each row, column, and 2×3 box with numbers 1–6',
   });
-
-  const constellationLevel = levelsByMode.constellation;
-  const currentPattern = generateConstellationLevel(constellationLevel);
-  const constellationTier = getMasteryTier(constellationLevel);
-  const nextConstellationTier = getMasteryTier(constellationLevel + 1);
-  const nextConstellationPattern = generateConstellationLevel(constellationLevel + 1);
-
-  const [userEdges, setUserEdges] = useState<[number, number][]>([]);
-  const [selectedNode, setSelectedNode] = useState<number | null>(null);
-  const [isCompleted, setIsCompleted] = useState(false);
 
   // User-controlled Micro-Clip Pairing settings (Volume, Stop, and collapsible Trigger Editor)
   const [childVolumePercent, setChildVolumePercent] = useState<number>(
@@ -201,11 +191,6 @@ export const ConstellationGame: React.FC<ConstellationGameProps> = ({
       ...prev,
       [mode]: clamped,
     }));
-    if (mode === 'constellation') {
-      setUserEdges([]);
-      setSelectedNode(null);
-      setIsCompleted(false);
-    }
     audioEngine.playHarmonicChime(3);
   }, []);
 
@@ -220,203 +205,18 @@ export const ConstellationGame: React.FC<ConstellationGameProps> = ({
     setChildVolumePercent(newPercent);
   };
 
-  useEffect(() => {
-    const requiredEdges = currentPattern.edges;
-    let allFound = true;
-
-    for (const req of requiredEdges) {
-      const exists = userEdges.some(
-        ([a, b]) =>
-          (a === req[0] && b === req[1]) || (a === req[1] && b === req[0])
-      );
-      if (!exists) {
-        allFound = false;
-        break;
-      }
-    }
-
-    if (allFound && userEdges.length >= requiredEdges.length && !isCompleted) {
-      setIsCompleted(true);
-      audioEngine.playCompletionChord();
-      handleAddStars(constellationTier.starsReward);
-    }
-  }, [userEdges, currentPattern, isCompleted, constellationTier.starsReward, handleAddStars]);
-
   const resetCurrentPuzzle = () => {
-    if (activeGameMode === 'constellation') {
-      setUserEdges([]);
-      setSelectedNode(null);
-      setIsCompleted(false);
-    } else {
-      setResetSignal((s) => s + 1);
-    }
-  };
-
-  const handleConstellationHint = () => {
-    if (isCompleted) return;
-    const missingEdge = currentPattern.edges.find(
-      ([reqA, reqB]) =>
-        !userEdges.some(
-          ([uA, uB]) =>
-            (uA === reqA && uB === reqB) || (uA === reqB && uB === reqA)
-        )
-    );
-    if (missingEdge) {
-      const u = Math.min(missingEdge[0], missingEdge[1]);
-      const v = Math.max(missingEdge[0], missingEdge[1]);
-      setUserEdges((prev) => [...prev, [u, v]]);
-      setSelectedNode(v);
-      audioEngine.playHarmonicChime(5);
-    }
+    setResetSignal((s) => s + 1);
   };
 
   const handleHeaderUpdate = useCallback((title: string, subtitle: string) => {
     setSubGameHeader({ title, subtitle });
   }, []);
 
-  const handleNodeClick = (nodeId: number) => {
-    if (isCompleted) return;
-    audioEngine.playHarmonicChime(nodeId);
-
-    if (selectedNode === null) {
-      setSelectedNode(nodeId);
-      return;
-    }
-
-    if (selectedNode === nodeId) {
-      setSelectedNode(null);
-      return;
-    }
-
-    const from = Math.min(selectedNode, nodeId);
-    const to = Math.max(selectedNode, nodeId);
-
-    const edgeExists = userEdges.some(([a, b]) => a === from && b === to);
-    if (edgeExists) {
-      setUserEdges((prev) => prev.filter(([a, b]) => !(a === from && b === to)));
-    } else {
-      setUserEdges((prev) => [...prev, [from, to]]);
-    }
-
-    setSelectedNode(nodeId);
-  };
-
-  // Canvas dynamic renderer for Constellation mode
-  useEffect(() => {
-    if (activeGameMode !== 'constellation') return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let animId: number;
-    let t = 0;
-
-    const render = () => {
-      t += 0.02;
-      const w = canvas.width;
-      const h = canvas.height;
-
-      ctx.clearRect(0, 0, w, h);
-
-      const activeTheme = getThemeById(themeId || getStoredThemeId());
-      const bgGrad = ctx.createRadialGradient(w / 2, h / 2, 50, w / 2, h / 2, w * 0.7);
-      bgGrad.addColorStop(0, activeTheme.canvasBg[0]);
-      bgGrad.addColorStop(0.6, activeTheme.canvasBg[1]);
-      bgGrad.addColorStop(1, activeTheme.canvasBg[2]);
-      ctx.fillStyle = bgGrad;
-      ctx.fillRect(0, 0, w, h);
-
-      for (let i = 0; i < 40; i++) {
-        const sx = (i * 137.5) % w;
-        const sy = (i * 243.7) % h;
-        const alpha = 0.2 + 0.3 * Math.sin(t + i);
-        ctx.fillStyle =
-          activeTheme.mode === 'light'
-            ? `rgba(21, 94, 86, ${alpha * 0.65})`
-            : `rgba(224, 242, 254, ${alpha})`;
-        ctx.beginPath();
-        ctx.arc(sx, sy, i % 3 === 0 ? 1.5 : 1, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      ctx.strokeStyle =
-        activeTheme.mode === 'light'
-          ? 'rgba(21, 94, 86, 0.22)'
-          : 'rgba(148, 163, 184, 0.16)';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 6]);
-      currentPattern.edges.forEach(([from, to]) => {
-        const nodeA = currentPattern.nodes.find((n) => n.id === from);
-        const nodeB = currentPattern.nodes.find((n) => n.id === to);
-        if (nodeA && nodeB) {
-          const ay = (getSafeNodeY(nodeA.y) / 100) * h;
-          const by = (getSafeNodeY(nodeB.y) / 100) * h;
-          ctx.beginPath();
-          ctx.moveTo((nodeA.x / 100) * w, ay);
-          ctx.lineTo((nodeB.x / 100) * w, by);
-          ctx.stroke();
-        }
-      });
-      ctx.setLineDash([]);
-
-      userEdges.forEach(([from, to]) => {
-        const nodeA = currentPattern.nodes.find((n) => n.id === from);
-        const nodeB = currentPattern.nodes.find((n) => n.id === to);
-        if (nodeA && nodeB) {
-          const ax = (nodeA.x / 100) * w;
-          const ay = (getSafeNodeY(nodeA.y) / 100) * h;
-          const bx = (nodeB.x / 100) * w;
-          const by = (getSafeNodeY(nodeB.y) / 100) * h;
-
-          ctx.strokeStyle = isCompleted ? '#34D399' : currentPattern.starColor;
-          ctx.lineWidth = 3;
-          ctx.shadowColor = currentPattern.starColor;
-          ctx.shadowBlur = 10;
-          ctx.beginPath();
-          ctx.moveTo(ax, ay);
-          ctx.lineTo(bx, by);
-          ctx.stroke();
-          ctx.shadowBlur = 0;
-        }
-      });
-
-      animId = requestAnimationFrame(render);
-    };
-
-    render();
-    return () => cancelAnimationFrame(animId);
-  }, [activeGameMode, userEdges, currentPattern, isCompleted, getSafeNodeY, themeId]);
-
-  useEffect(() => {
-    if (activeGameMode !== 'constellation') return;
-    const handleResize = () => {
-      const container = containerRef.current;
-      const canvas = canvasRef.current;
-      if (container && canvas) {
-        canvas.width = container.clientWidth;
-        canvas.height = container.clientHeight;
-      }
-    };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [activeGameMode]);
-
   const effectiveGain = (childVolumePercent / 100) * parentCeilingGain;
 
-  const displayTitle =
-    activeGameMode === 'constellation' ? currentPattern.name : subGameHeader.title;
-  const displaySubtitle =
-    activeGameMode === 'constellation'
-      ? `${currentPattern.theme} • Tap stars to weave harmonic starlight`
-      : subGameHeader.subtitle;
-
-  const matchedConstellationEdges = currentPattern.edges.filter(([reqA, reqB]) =>
-    userEdges.some(
-      ([uA, uB]) => (uA === reqA && uB === reqB) || (uA === reqB && uB === reqA)
-    )
-  ).length;
+  const displayTitle = subGameHeader.title;
+  const displaySubtitle = subGameHeader.subtitle;
 
   return (
     <div className="relative w-full flex flex-col rounded-2xl sm:rounded-3xl bg-slate-950 border border-slate-800 shadow-2xl overflow-hidden">
@@ -444,11 +244,11 @@ export const ConstellationGame: React.FC<ConstellationGameProps> = ({
           </span>
         </div>
 
-        {/* Game Selector Strip */}
+        {/* Game Selector Strip — Full Grid on Tablet/Desktop, Swipeable on Mobile */}
         <div
           role="tablist"
           aria-label="Counterconditioning Focus Games"
-          className="flex gap-2 overflow-x-auto no-scrollbar pb-0.5 snap-x"
+          className="flex gap-1.5 overflow-x-auto pb-1 snap-x sm:grid sm:grid-cols-4 lg:grid-cols-7 sm:gap-2 sm:overflow-visible sm:pb-0"
         >
           {PUZZLE_MODES.map((mode) => {
             const isActive = activeGameMode === mode.id;
@@ -462,13 +262,13 @@ export const ConstellationGame: React.FC<ConstellationGameProps> = ({
                   setActiveGameMode(mode.id);
                   audioEngine.playHarmonicChime(2);
                 }}
-                className={`snap-start shrink-0 min-w-[142px] flex items-center justify-between gap-2 p-2 sm:p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                className={`snap-start shrink-0 min-w-[134px] sm:min-w-0 flex items-center justify-between gap-1.5 p-2 rounded-xl border text-left transition-all cursor-pointer ${
                   isActive
                     ? 'bg-teal-950/70 border-teal-400 text-white shadow-sm ring-1 ring-teal-400/30'
                     : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900'
                 }`}
               >
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
                   <div
                     className={`p-1.5 rounded-lg shrink-0 ${
                       isActive ? 'bg-teal-500/20 text-teal-300' : 'bg-slate-800 text-slate-400'
@@ -482,7 +282,7 @@ export const ConstellationGame: React.FC<ConstellationGameProps> = ({
                   </div>
                 </div>
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-800/90 text-teal-300 border border-slate-700 shrink-0">
-                  Lvl {modeLevel}
+                  L{modeLevel}
                 </span>
               </button>
             );
@@ -559,136 +359,26 @@ export const ConstellationGame: React.FC<ConstellationGameProps> = ({
         </div>
       )}
 
-      {activeGameMode === 'constellation' && (
-        <div
-          ref={containerRef}
-          className="relative flex-1 w-full h-[380px] sm:h-[460px] overflow-hidden cursor-crosshair select-none"
-        >
-          <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
-
-          <div className="absolute top-2.5 left-2.5 right-2.5 sm:top-3 sm:left-3 sm:right-3 z-20 flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 bg-slate-900/85 backdrop-blur-md px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl border border-slate-700/70">
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <button
-                onClick={() =>
-                  constellationLevel > 1 &&
-                  handleSetLevel('constellation', constellationLevel - 1)
-                }
-                disabled={constellationLevel <= 1}
-                aria-label="Previous Constellation Level"
-                className="min-h-[32px] min-w-[32px] flex items-center justify-center p-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-35 text-slate-300 transition-colors cursor-pointer"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="text-[11px] sm:text-xs font-bold text-teal-300 tracking-wide">
-                {constellationTier.tierBadge} • Lvl {constellationLevel} ({currentPattern.nodes.length}★)
-              </span>
-              <button
-                onClick={() => handleSetLevel('constellation', constellationLevel + 1)}
-                aria-label="Next Constellation Level"
-                className="min-h-[32px] min-w-[32px] flex items-center justify-center p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <span className="text-[11px] sm:text-xs font-semibold text-sky-300 bg-sky-500/10 px-2 py-1 rounded-lg border border-sky-500/20">
-                {matchedConstellationEdges}/{currentPattern.edges.length} Paths
-              </span>
-              <button
-                onClick={handleConstellationHint}
-                disabled={isCompleted}
-                className="min-h-[32px] flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-semibold bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/30 transition-all cursor-pointer disabled:opacity-40"
-              >
-                <Wand2 className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                <span>Harmonic Hint</span>
-              </button>
-            </div>
-          </div>
-
-          {currentPattern.nodes.map((node) => {
-            const isSelected = selectedNode === node.id;
-            const safeY = getSafeNodeY(node.y);
-            return (
-              <button
-                key={node.id}
-                onClick={() => handleNodeClick(node.id)}
-                style={{
-                  left: `${node.x}%`,
-                  top: `${safeY}%`,
-                  transform: 'translate(-50%, -50%)',
-                }}
-                className={`absolute group flex items-center justify-center p-3.5 sm:p-3 focus:outline-none transition-all cursor-pointer ${
-                  isSelected ? 'scale-125 z-30' : 'hover:scale-110 z-20'
-                }`}
-                aria-label={`Star node ${node.id + 1}`}
-              >
-                <div
-                  className={`absolute w-11 h-11 sm:w-10 sm:h-10 rounded-full transition-all ${
-                    isSelected
-                      ? 'bg-teal-400/30 scale-125 animate-ping duration-1000'
-                      : 'bg-sky-400/10 group-hover:bg-sky-400/20'
-                  }`}
-                />
-
-                <div
-                  className={`relative w-4 h-4 rounded-full border-2 transition shadow-lg ${
-                    isSelected
-                      ? 'bg-white border-teal-300 shadow-teal-400/80 scale-110'
-                      : isCompleted
-                      ? 'bg-emerald-300 border-white shadow-emerald-400/60'
-                      : 'bg-slate-100 border-sky-300 shadow-sky-400/50'
-                  }`}
-                />
-              </button>
-            );
-          })}
-
-          {isCompleted && (
-            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-xs p-4 animate-in fade-in duration-500">
-              <div className="p-5 sm:p-6 rounded-3xl bg-slate-900/95 border border-emerald-400/40 text-center shadow-2xl max-w-sm w-full">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-xs font-bold mb-2">
-                  {Array.from({ length: constellationTier.starsReward }).map((_, i) => (
-                    <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                  ))}
-                  +{constellationTier.starsReward} Harmony {constellationTier.starsReward === 1 ? 'Star' : 'Stars'} Earned
-                </div>
-                <h3 className="text-lg sm:text-xl font-bold text-white">{currentPattern.name} Harmonized!</h3>
-                <p className="text-xs text-slate-300 mt-1">
-                  Ready for{' '}
-                  <span className="text-teal-300 font-semibold">
-                    Level {constellationLevel + 1} ({nextConstellationPattern.nodes.length} Stars • {nextConstellationTier.tierName})
-                  </span>
-                  ?
-                </p>
-                <div className="mt-4 sm:mt-5 flex gap-2">
-                  <button
-                    onClick={resetCurrentPuzzle}
-                    className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition cursor-pointer"
-                  >
-                    Replay Level
-                  </button>
-                  <button
-                    onClick={() => handleSetLevel('constellation', constellationLevel + 1)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-xs font-bold text-slate-950 shadow-md transition cursor-pointer"
-                  >
-                    <span>Advance to Level {constellationLevel + 1}</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+      {activeGameMode === 'wordsearch' && (
+        <div className="flex-1 w-full min-h-[410px] sm:min-h-[460px]">
+          <WordSearchGame
+            key={`wordsearch-${levelsByMode.wordsearch}-${resetSignal}`}
+            level={levelsByMode.wordsearch}
+            onLevelComplete={handleAddStars}
+            onLevelChange={(newLvl) => handleSetLevel('wordsearch', newLvl)}
+            resetSignal={resetSignal}
+            onHeaderUpdate={handleHeaderUpdate}
+          />
         </div>
       )}
 
-      {activeGameMode === 'tangram' && (
+      {activeGameMode === 'blockslide' && (
         <div className="flex-1 w-full min-h-[410px] sm:min-h-[460px]">
-          <HarmonicTangramGame
-            key={`tangram-${levelsByMode.tangram}-${resetSignal}`}
-            level={levelsByMode.tangram}
+          <BlockSlideGame
+            key={`blockslide-${levelsByMode.blockslide}-${resetSignal}`}
+            level={levelsByMode.blockslide}
             onLevelComplete={handleAddStars}
-            onLevelChange={(newLvl) => handleSetLevel('tangram', newLvl)}
+            onLevelChange={(newLvl) => handleSetLevel('blockslide', newLvl)}
             resetSignal={resetSignal}
             onHeaderUpdate={handleHeaderUpdate}
           />
@@ -797,6 +487,28 @@ export const ConstellationGame: React.FC<ConstellationGameProps> = ({
               </div>
 
               <div className="flex items-center gap-2 text-[11px] font-mono">
+                {onSelectPreloadedTrigger && (
+                  <div className="hidden sm:flex items-center gap-1 mr-1 font-sans">
+                    {PRELOADED_TRIGGERS.map((item) => {
+                      const isCurrent = activeTriggerId === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => onSelectPreloadedTrigger(item)}
+                          className={`px-2 py-0.5 rounded-lg border text-[10px] font-semibold transition cursor-pointer ${
+                            isCurrent
+                              ? 'bg-teal-500/20 border-teal-400 text-teal-200'
+                              : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300'
+                          }`}
+                          title={`Switch active trigger to preloaded ${item.name}.mp3`}
+                        >
+                          {item.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 <span className="text-teal-300 font-bold">
                   Vol: {childVolumePercent}%
                 </span>

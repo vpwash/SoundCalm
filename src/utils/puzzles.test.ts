@@ -2,13 +2,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   getMasteryTier,
-  generateConstellationLevel,
-  generateTangramLevel,
-  rotateTangramPiece,
-  placeTangramPiece,
-  isTangramPieceAligned,
-  checkTangramSolved,
-  applyTangramHint,
+  generateWordSearchLevel,
+  getWordSearchLineCells,
+  matchWordSearchSelection,
+  generateBlockSlideLevel,
+  moveSlidingBlock,
+  checkBlockSlideSolved,
+  applyBlockSlideHint,
   generateChromaLevel,
   swapChromaTiles,
   checkChromaSolved,
@@ -42,47 +42,83 @@ describe('Mastery Tiers & Progressive Complexity', () => {
     assert.equal(t4.tierNumber, 4);
     assert.equal(t4.starsReward, 4);
   });
+});
 
-  it('progressively scales Constellation Connect from 5 nodes (Level 1) to 10+ nodes at higher levels', () => {
-    const lvl1 = generateConstellationLevel(1);
-    const lvl3 = generateConstellationLevel(3);
-    const lvl5 = generateConstellationLevel(5);
-    const lvl7 = generateConstellationLevel(7);
+describe('Serene Word Search Progressive Logic', () => {
+  it('scales grid size from 7x7 (Level 1) to 8x8 (Level 3) and 9x9 (Level 5+)', () => {
+    const l1 = generateWordSearchLevel(1);
+    const l3 = generateWordSearchLevel(3);
+    const l5 = generateWordSearchLevel(5);
 
-    assert.equal(lvl1.nodes.length, 5);
-    assert.equal(lvl3.nodes.length, 7);
-    assert.equal(lvl5.nodes.length, 10);
-    assert.equal(lvl7.nodes.length >= 9, true);
-    assert.equal(lvl7.edges.length > lvl1.edges.length, true);
+    assert.equal(l1.gridSize, 7);
+    assert.equal(l1.words.length, 5);
+    assert.equal(l3.gridSize, 8);
+    assert.equal(l3.words.length, 6);
+    assert.equal(l5.gridSize, 9);
+    assert.equal(l5.words.length, 7);
+  });
+
+  it('places every word accurately on the grid and matches forward/reverse selections', () => {
+    const lvl = generateWordSearchLevel(2);
+    for (const placement of lvl.words) {
+      const letters = placement.cells.map(([r, c]) => lvl.grid[r][c]).join('');
+      assert.equal(letters, placement.word);
+
+      const start = placement.cells[0];
+      const end = placement.cells[placement.cells.length - 1];
+      const line = getWordSearchLineCells(start, end);
+      assert.deepEqual(line, placement.cells);
+
+      // Forward and reverse selections both match
+      assert.equal(matchWordSearchSelection(line, lvl.words, [])?.word, placement.word);
+      assert.equal(
+        matchWordSearchSelection([...line].reverse(), lvl.words, [])?.word,
+        placement.word
+      );
+      // Already-found words are not matched again
+      assert.equal(matchWordSearchSelection(line, lvl.words, [placement.word]), null);
+    }
   });
 });
 
-describe('Harmonic Tangram Progressive Logic', () => {
-  it('scales piece count from 4 crystals (Level 1) to 5 (Level 2), 6 (Level 3), and 7 (Level 4+)', () => {
-    assert.equal(generateTangramLevel(1).pieces.length, 4);
-    assert.equal(generateTangramLevel(2).pieces.length, 5);
-    assert.equal(generateTangramLevel(3).pieces.length, 6);
-    assert.equal(generateTangramLevel(4).pieces.length, 7);
-    assert.equal(generateTangramLevel(6).pieces.length, 7);
-  });
+describe('Jade Block Slide Progressive Logic', () => {
+  it('generates valid non-overlapping 6x6 levels and solves all 5 templates via BFS hints', () => {
+    for (let lvlNum = 1; lvlNum <= 5; lvlNum++) {
+      const config = generateBlockSlideLevel(lvlNum);
+      assert.equal(config.gridSize, 6);
+      assert.equal(checkBlockSlideSolved(config.blocks, config.gridSize), false);
 
-  it('solves any Tangram level step-by-step using applyTangramHint', () => {
-    let pieces = generateTangramLevel(3).pieces.map((p) => ({ ...p }));
-    assert.equal(checkTangramSolved(pieces), false);
+      // Verify no overlapping cells
+      const occupied = new Set<string>();
+      for (const b of config.blocks) {
+        for (let i = 0; i < b.length; i++) {
+          const r = b.orientation === 'v' ? b.row + i : b.row;
+          const c = b.orientation === 'h' ? b.col + i : b.col;
+          const key = `${r},${c}`;
+          assert.equal(occupied.has(key), false, `Overlap at ${key} in level ${lvlNum}`);
+          occupied.add(key);
+        }
+      }
 
-    for (let i = 0; i < pieces.length; i++) {
-      pieces = applyTangramHint(pieces);
+      // Solve step-by-step using applyBlockSlideHint
+      let blocks = config.blocks.map((b) => ({ ...b }));
+      for (let step = 0; step < 30 && !checkBlockSlideSolved(blocks, config.gridSize); step++) {
+        blocks = applyBlockSlideHint(blocks, config.gridSize);
+      }
+      assert.equal(
+        checkBlockSlideSolved(blocks, config.gridSize),
+        true,
+        `Level ${lvlNum} should be solvable via BFS hints`
+      );
     }
-    assert.equal(checkTangramSolved(pieces), true);
   });
 
-  it('supports manual placement and rotation symmetry', () => {
-    let pieces = generateTangramLevel(1).pieces.map((p) => ({ ...p }));
-    pieces = pieces.map((p) => (p.id === 'piece_head' ? rotateTangramPiece(rotateTangramPiece(rotateTangramPiece(p))) : p));
-    assert.equal(isTangramPieceAligned(pieces.find((p) => p.id === 'piece_head')!), true);
-
-    pieces = placeTangramPiece(pieces, 'piece_tail', 'slot_tail');
-    assert.equal(isTangramPieceAligned(pieces.find((p) => p.id === 'piece_tail')!), true);
+  it('clamps block movement against walls and other blocks', () => {
+    const config = generateBlockSlideLevel(1);
+    const moved = moveSlidingBlock(config.blocks, 'key', 5, config.gridSize);
+    const keyBlock = moved.find((b) => b.id === 'key')!;
+    // Blocked by b1 at col 2, so key (length 2) cannot move past col 0
+    assert.equal(keyBlock.col, 0);
   });
 });
 

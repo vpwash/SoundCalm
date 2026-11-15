@@ -8,7 +8,7 @@ import {
   audioEngine,
   SoundscapeType,
   MusicRotationStatus,
-  BUILTIN_TRIGGERS,
+  SOUNDSCAPE_OPTIONS,
 } from './audio/AudioEngine.ts';
 import {
   ParentSettings,
@@ -27,8 +27,16 @@ import {
   saveCustomAudioTrack,
   renameCustomAudioRecord,
   reconstructAudioBufferFromRecord,
+  getExternalMusicMode,
+  saveExternalMusicMode,
+  StoredAudioRecord,
   DEFAULT_PARENT_SETTINGS,
 } from './utils/storage.ts';
+import {
+  PRELOADED_TRIGGERS,
+  PreloadedTriggerItem,
+  loadPreloadedTriggerBuffer,
+} from './utils/preloadedTriggers.ts';
 import { PWAInstallButton } from './components/PWAInstallButton.tsx';
 import { OfflineIndicator } from './components/OfflineIndicator.tsx';
 import { BreathingFlower } from './components/BreathingFlower.tsx';
@@ -77,12 +85,16 @@ export default function App() {
   const [musicRotationStatus, setMusicRotationStatus] = useState<MusicRotationStatus>(() =>
     audioEngine.getMusicRotationStatus()
   );
-  const isSoundscapeEnabledRef = useRef<boolean>(true);
+  const [externalMusicMode, setExternalMusicMode] = useState<boolean>(() =>
+    getExternalMusicMode()
+  );
+  const isSoundscapeEnabledRef = useRef<boolean>(!getExternalMusicMode());
   const [activeTriggerId, setActiveTriggerId] = useState<string>('');
   const [activeTriggerName, setActiveTriggerName] = useState<string>('No Clip Loaded');
   const [customAudioBuffer, setCustomAudioBuffer] = useState<AudioBuffer | undefined>(undefined);
   const [clipOffsetSec, setClipOffsetSec] = useState<number>(0);
   const [clipDurationSec, setClipDurationSec] = useState<number>(0.5);
+  const pendingAudioRecordRef = useRef<StoredAudioRecord | null>(null);
 
   // Parent Configuration
   const [parentSettings, setParentSettings] = useState<ParentSettings>(DEFAULT_PARENT_SETTINGS);
@@ -149,6 +161,7 @@ export default function App() {
     setParentSettings(settings);
     audioEngine.setParentCeilingGain(settings.maxTriggerCeilingGain);
     audioEngine.setLowpassCutoff(settings.filterCutoffHz);
+    audioEngine.setAudioSessionMode(externalMusicMode ? 'ambient' : 'playback');
 
     const params = new URLSearchParams(window.location.search);
     const shouldAutoStart = params.get('autostart') === '1';
@@ -160,23 +173,15 @@ export default function App() {
     getAllCustomAudioRecords()
       .then((records) => {
         if (records.length > 0) {
-          const ctx = audioEngine.ensureContext();
-          for (let i = records.length - 1; i >= 0; i--) {
-            const rec = records[i];
-            const buf = reconstructAudioBufferFromRecord(rec, ctx);
-            if (buf) {
-              const offset = Number.isFinite(rec.clipOffsetSec) ? Number(rec.clipOffsetSec) : 0;
-              const dur = Number.isFinite(rec.clipDurationSec) ? Number(rec.clipDurationSec) : 0.5;
-              setActiveTriggerId(rec.id);
-              setActiveTriggerName(rec.name || 'Saved Trigger Clip');
-              setCustomAudioBuffer(buf);
-              setClipOffsetSec(offset);
-              setClipDurationSec(dur);
-              audioEngine.setLowpassCutoff(rec.lowpassCutoffHz || 2200);
-              audioEngine.loadTriggerClip(buf, offset, dur);
-              break;
-            }
-          }
+          const rec = records[records.length - 1];
+          pendingAudioRecordRef.current = rec;
+          const offset = Number.isFinite(rec.clipOffsetSec) ? Number(rec.clipOffsetSec) : 0;
+          const dur = Number.isFinite(rec.clipDurationSec) ? Number(rec.clipDurationSec) : 0.5;
+          setActiveTriggerId(rec.id);
+          setActiveTriggerName(rec.name || 'Saved Trigger Clip');
+          setClipOffsetSec(offset);
+          setClipDurationSec(dur);
+          audioEngine.setLowpassCutoff(rec.lowpassCutoffHz || 2200);
         }
       })
       .catch(() => {});
@@ -208,17 +213,46 @@ export default function App() {
     return () => clearInterval(timer);
   }, [sessionState, targetSessionInfo.targetSeconds]);
 
-  // AudioContext unlock on initial tap — starts soundscape while keeping triggers stopped until a session is logged
-  const handleInitialStart = async () => {
+  // AudioContext unlock on initial tap — MUST run synchronously inside user gesture for iOS Safari
+  const handleInitialStart = (startWithExternalMusic?: boolean) => {
+    const useExternal =
+      typeof startWithExternalMusic === 'boolean' ? startWithExternalMusic : externalMusicMode;
+    if (typeof startWithExternalMusic === 'boolean') {
+      setExternalMusicMode(useExternal);
+      saveExternalMusicMode(useExternal);
+      isSoundscapeEnabledRef.current = !useExternal;
+    }
+    audioEngine.setAudioSessionMode(useExternal ? 'ambient' : 'playback');
     hasStartedRef.current = true;
     setHasStarted(true);
-    await audioEngine.initAudio();
+
+    // Synchronously create, resume, and unlock AudioContext inside the tap gesture
+    audioEngine.initAudio();
     audioEngine.setStudioDucking(false);
-    if (isSoundscapeEnabledRef.current) {
+
+    if (!useExternal && isSoundscapeEnabledRef.current) {
       audioEngine.startSoundscape(currentSoundscape);
+    } else {
+      audioEngine.stopSoundscape();
     }
-    if (customAudioBuffer) {
+
+    // Reconstruct any saved IndexedDB trigger clip now that AudioContext is unlocked,
+    // or auto-load the first preloaded MP3 trigger ("Chewing") if none is saved yet.
+    if (!customAudioBuffer && pendingAudioRecordRef.current) {
+      const ctx = audioEngine.ensureContext();
+      const rec = pendingAudioRecordRef.current;
+      const buf = reconstructAudioBufferFromRecord(rec, ctx);
+      if (buf) {
+        const offset = Number.isFinite(rec.clipOffsetSec) ? Number(rec.clipOffsetSec) : 0;
+        const dur = Number.isFinite(rec.clipDurationSec) ? Number(rec.clipDurationSec) : 0.5;
+        setCustomAudioBuffer(buf);
+        audioEngine.loadTriggerClip(buf, offset, dur);
+      }
+      pendingAudioRecordRef.current = null;
+    } else if (customAudioBuffer) {
       audioEngine.loadTriggerClip(customAudioBuffer, clipOffsetSec, clipDurationSec);
+    } else if (PRELOADED_TRIGGERS.length > 0) {
+      void handleSelectPreloadedTrigger(PRELOADED_TRIGGERS[0], false);
     }
   };
 
@@ -241,11 +275,29 @@ export default function App() {
     }
   };
 
-  // Soundscape selector, crossfade skip, Auto-Mix, & play/stop control
+  // Soundscape selector, crossfade skip, Auto-Mix, External Music Mode & play/stop control
   const handleSelectSoundscape = (type: SoundscapeType) => {
+    const selectedOption = SOUNDSCAPE_OPTIONS.find((o) => o.id === type);
+    if (selectedOption?.category === 'spa_music' && externalMusicMode) {
+      setExternalMusicMode(false);
+      saveExternalMusicMode(false);
+    }
     setCurrentSoundscape(type);
     isSoundscapeEnabledRef.current = true;
     audioEngine.startSoundscape(type, 1.5);
+  };
+
+  const handleToggleExternalMusicMode = (enabled: boolean) => {
+    setExternalMusicMode(enabled);
+    saveExternalMusicMode(enabled);
+    audioEngine.setAudioSessionMode(enabled ? 'ambient' : 'playback');
+    if (enabled) {
+      isSoundscapeEnabledRef.current = false;
+      audioEngine.stopSoundscape();
+    } else {
+      isSoundscapeEnabledRef.current = true;
+      audioEngine.startSoundscape(currentSoundscape, 1.5);
+    }
   };
 
   const handleToggleSoundscape = () => {
@@ -312,6 +364,30 @@ export default function App() {
     }
   };
 
+  // Preloaded MP3 Trigger Loader (/public/triggers/*.mp3)
+  const handleSelectPreloadedTrigger = async (
+    item: PreloadedTriggerItem,
+    playPreview: boolean = true
+  ) => {
+    try {
+      const ctx = audioEngine.ensureContext();
+      const { buffer, offsetSec, durationSec } = await loadPreloadedTriggerBuffer(item, ctx);
+      handleSelectTrigger(
+        item.id,
+        buffer,
+        item.name,
+        item.defaultCutoffHz,
+        offsetSec,
+        durationSec
+      );
+      if (playPreview) {
+        audioEngine.playMicroClipNow();
+      }
+    } catch {
+      // Ignore if offline before precache or decode failed
+    }
+  };
+
   // Quick 1-step Audio File Upload directly from the Game HUD
   const handleQuickUploadClip = async (file: File) => {
     try {
@@ -372,9 +448,10 @@ export default function App() {
     setSessionState('active');
     setSessionStartTime(Date.now());
     setActiveTab('therapy');
-    // Start ambient (unless user explicitly stopped it) and trigger exposure automatically
+    // Start ambient (unless in External Music Mode or user explicitly stopped it) and trigger exposure automatically
     audioEngine.setStudioDucking(false);
-    if (isSoundscapeEnabledRef.current) {
+    audioEngine.restoreAmbientAudioSession();
+    if (!externalMusicMode && isSoundscapeEnabledRef.current) {
       audioEngine.startSoundscape(currentSoundscape);
     }
     audioEngine.startTriggerExposure(
@@ -452,11 +529,11 @@ export default function App() {
       <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800 px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
           {/* Brand Icon */}
-          <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-teal-500 to-sky-400 p-0.5 shadow-md shadow-teal-950">
-            <div className="flex h-full w-full items-center justify-center rounded-[10px] bg-slate-950">
-              <Sparkles className="w-4 h-4 text-teal-400" />
-            </div>
-          </div>
+          <img
+            src="/pwa-192x192.png"
+            alt="SoundCalm logo"
+            className="h-8 w-8 sm:h-9 sm:w-9 shrink-0 rounded-xl shadow-md shadow-teal-950/60 border border-teal-400/25 object-cover"
+          />
           <div className="min-w-0">
             <h1 className="text-sm sm:text-base font-bold text-white tracking-tight flex items-center gap-2 truncate">
               <span>SoundCalm</span>
@@ -545,8 +622,12 @@ export default function App() {
         {/* Splash Unlock Screen (iOS Safari Audio Unlock Requirement) */}
         {!hasStarted ? (
           <div className="my-4 sm:my-10 p-6 sm:p-12 rounded-3xl bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-teal-500/30 text-center shadow-2xl flex flex-col items-center max-w-xl mx-auto animate-in fade-in">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-teal-500/10 border-2 border-teal-400/30 flex items-center justify-center text-teal-300 mb-5 sm:mb-6 shadow-lg shadow-teal-950/50">
-              <Headphones className="w-8 h-8 sm:w-10 sm:h-10 animate-pulse" />
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl overflow-hidden border-2 border-teal-400/35 mb-5 sm:mb-6 shadow-xl shadow-teal-950/60">
+              <img
+                src="/pwa-512x512.png"
+                alt="SoundCalm App Icon"
+                className="w-full h-full object-cover"
+              />
             </div>
 
             <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
@@ -567,14 +648,25 @@ export default function App() {
               </div>
             </div>
 
-            <button
-              onClick={handleInitialStart}
-              className="w-full flex items-center justify-center gap-2.5 py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-400 hover:to-teal-500 text-white font-bold text-sm sm:text-base shadow-xl shadow-teal-950 transition active:scale-[0.98] focus:outline-none focus:ring-4 focus:ring-teal-500/30 cursor-pointer"
-              aria-label="Begin Therapy Session"
-            >
-              <Play className="w-5 h-5 fill-white" />
-              <span>Tap to Begin (Enable Audio Engine)</span>
-            </button>
+            <div className="w-full space-y-2.5">
+              <button
+                onClick={() => void handleInitialStart(false)}
+                className="w-full flex items-center justify-center gap-2.5 py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-400 hover:to-teal-500 text-white font-bold text-sm sm:text-base shadow-xl shadow-teal-950 transition active:scale-[0.98] focus:outline-none focus:ring-4 focus:ring-teal-500/30 cursor-pointer"
+                aria-label="Begin Therapy Session with SoundCalm Spa Music"
+              >
+                <Play className="w-5 h-5 fill-white" />
+                <span>Tap to Begin (SoundCalm Music & Soundscapes)</span>
+              </button>
+
+              <button
+                onClick={() => void handleInitialStart(true)}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-400/40 text-indigo-200 font-semibold text-xs sm:text-sm transition active:scale-[0.98] cursor-pointer"
+                aria-label="Begin Therapy Session while keeping your own background music playing"
+              >
+                <Headphones className="w-4 h-4 text-indigo-300 shrink-0" />
+                <span>Keep My Own Music Playing (Spotify, Amazon Music, etc.)</span>
+              </button>
+            </div>
             <p className="text-[11px] text-slate-500 mt-3">
               Requires headphones for optimal acoustic masking and binaural calibration.
             </p>
@@ -634,16 +726,19 @@ export default function App() {
                   volume={soundscapeVolume}
                   isPlaying={isSoundscapePlaying}
                   rotationStatus={musicRotationStatus}
+                  externalMusicMode={externalMusicMode}
                   onSelectSoundscape={handleSelectSoundscape}
                   onVolumeChange={handleSoundscapeVolumeChange}
                   onTogglePlay={handleToggleSoundscape}
                   onToggleAutoRotate={handleToggleAutoRotate}
                   onNextRandomMusic={handleNextRandomMusic}
+                  onToggleExternalMusicMode={handleToggleExternalMusicMode}
                 />
 
                 {/* Main Interactive Counterconditioning Game & Micro-Clip Pairing Bar */}
                 <ConstellationGame
                   parentCeilingGain={parentSettings.maxTriggerCeilingGain}
+                  activeTriggerId={activeTriggerId}
                   activeTriggerName={activeTriggerName}
                   hasRecordedClip={!!customAudioBuffer}
                   themeId={currentThemeId}
@@ -651,6 +746,7 @@ export default function App() {
                   onFinishSession={handleFinishSession}
                   onOpenStudio={() => handleSwitchTab('studio')}
                   onQuickUploadClip={handleQuickUploadClip}
+                  onSelectPreloadedTrigger={(item) => void handleSelectPreloadedTrigger(item, true)}
                   onRenameActiveTrigger={handleRenameActiveTrigger}
                 />
 

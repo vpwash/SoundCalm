@@ -4,7 +4,7 @@
  * and longitudinal SUDS (Subjective Units of Distress Scale) metrics.
  */
 
-import { SessionLog, SudsAnchor } from '../types.ts';
+import type { SessionLog, SudsAnchor } from '../types.ts';
 
 /**
  * Standard SUDS (0-10) Visual & Child-Friendly Anchors
